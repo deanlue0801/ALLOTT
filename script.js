@@ -174,6 +174,16 @@ function renderPeople() {
         };
         div.appendChild(lockBtn);
 
+        // 【★★★ 在這裡貼上第二段程式碼 ★★★】
+        const renameBtn = document.createElement('div');
+        renameBtn.className = 'rename-btn';
+        renameBtn.innerHTML = '✏️';
+        renameBtn.onclick = (e) => {
+            e.stopPropagation();
+            renameItem(index);
+        };
+        div.appendChild(renameBtn);        
+
         const textDiv = document.createElement('div');
         textDiv.className = 'text';
         textDiv.textContent = item.name;
@@ -328,7 +338,9 @@ function startDragMode(e, index) {
     }
 
     if (isDragging) return;
-    if (e.target.classList.contains('delete-btn') || e.target.classList.contains('lock-btn')) return;
+    if (e.target.classList.contains('delete-btn') || e.target.classList.contains('lock-btn') || e.target.classList.contains('rename-btn')) {
+        return;
+    }
     
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
