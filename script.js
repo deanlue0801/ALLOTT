@@ -34,7 +34,19 @@ const MAP_HEIGHT = 12000;
 const GRID_ORIGIN_X = MAP_WIDTH / 2;
 const GRID_ORIGIN_Y = MAP_HEIGHT / 2;
 
-// --- Password Verification ---
+// --- Password Verification & Initialization ---
+(function initialize() {
+    if (!checkPassword()) {
+        return; // Stop execution if password fails
+    }
+    const centerX = MAP_WIDTH / 2 - window.innerWidth / 2;
+    const centerY = MAP_HEIGHT / 2 - window.innerHeight / 2;
+    window.scrollTo(centerX, centerY);
+    
+    setupFirebase();
+    setupGlobalEventListeners();
+})();
+
 function checkPassword() {
     const today = new Date();
     const year = today.getFullYear();
@@ -51,7 +63,7 @@ function checkPassword() {
     return true;
 }
 
-// --- Firebase Configuration & Initialization ---
+// --- Firebase ---
 const firebaseConfig = {
     apiKey: "AIzaSyC_onVT6MHR0fU3SgKKM0VH951gwBC5PB0",
     authDomain: "allott-16d7d.firebaseapp.com",
@@ -172,15 +184,18 @@ window.unlockAllItems = function() {
     }
 }
 
+// 【★★★ 這邊是唯一的修改！我把清空選取的程式碼拿掉了 ★★★】
 window.toggleMultiSelectMode = function() {
     isMultiSelectMode = !isMultiSelectMode;
     mapContainer.classList.toggle('multi-select-mode', isMultiSelectMode);
     multiSelectBtn.classList.toggle('active', isMultiSelectMode);
-    if (!isMultiSelectMode) {
-        selectedIndices.clear();
-        deleteSelectedBtn.style.display = 'none';
-        renderPeople();
-    }
+    
+    // 退出模式時，不再清空選取，這樣才能拖曳
+    // if (!isMultiSelectMode) {
+    //     selectedIndices.clear(); // <-- 這行錯誤的程式碼已被移除
+    //     deleteSelectedBtn.style.display = 'none';
+    //     renderPeople();
+    // }
 }
 
 function toggleItemSelection(index) {
@@ -278,13 +293,17 @@ function setupGlobalEventListeners() {
                 dragPerson = index;
                 if (!selectedIndices.has(index)) {
                     selectedIndices.clear();
+                    deleteSelectedBtn.style.display = 'none';
                     selectedIndices.add(index);
                     renderPeople();
                 }
             }
         } else if (isMultiSelectMode && target === mapContainer) {
             isMarqueeSelecting = true;
-            if (!e.shiftKey) selectedIndices.clear();
+            if (!e.shiftKey) {
+                selectedIndices.clear();
+                deleteSelectedBtn.style.display = 'none';
+            }
             
             const rect = mapContainer.getBoundingClientRect();
             marqueeStartPos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -294,6 +313,11 @@ function setupGlobalEventListeners() {
             selectionBox.style.left = `${marqueeStartPos.x}px`;
             selectionBox.style.top = `${marqueeStartPos.y}px`;
             mapContainer.appendChild(selectionBox);
+        } else if (target === mapContainer) {
+            // 在非多選模式下點擊空白處，取消所有選取
+            selectedIndices.clear();
+            deleteSelectedBtn.style.display = 'none';
+            renderPeople();
         }
     };
 
