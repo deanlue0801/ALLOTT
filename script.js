@@ -6,9 +6,13 @@ import { getDatabase, ref, set, onValue } from 'https://www.gstatic.com/firebase
 let people = [];
 let app, database;
 let isDragging = false;
-let dragPerson = null;
-let dragOffset = {x: 0, y: 0};
+let dragPerson = null; // 在單選模式下，代表被拖曳的項目索引
+let dragOffset = {x: 0, y: 0, calculated: false};
 let isUpdatingFromFirebase = false;
+
+// Multi-select variables
+let isMultiSelectMode = false;
+let selectedIndices = new Set();
 
 // Touch-related variables
 let touchStartTime = 0;
@@ -25,6 +29,8 @@ const itemColorSelect = document.getElementById('itemColor');
 const connectionStatusEl = document.getElementById('connectionStatus');
 const debugOverlay = document.getElementById('debugOverlay');
 const touchHint = document.getElementById('touchHint');
+const multiSelectBtn = document.getElementById('multiSelectBtn');
+const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
 
 // --- Constants ---
 const MAP_WIDTH = 15000;
@@ -112,7 +118,6 @@ function setupFirebaseListener() {
     });
 }
 
-
 // --- Coordinate Transformation ---
 function gridToPixel(gridX, gridY) {
     const gridStep = 40;
@@ -132,7 +137,45 @@ function pixelToGrid(pixelX, pixelY) {
 
 // --- Core Functions ---
 
-// 【★★★ 在這裡貼上第一段程式碼 ★★★】
+window.toggleMultiSelectMode = function() {
+    isMultiSelectMode = !isMultiSelectMode;
+    mapContainer.classList.toggle('multi-select-mode', isMultiSelectMode);
+    multiSelectBtn.classList.toggle('active', isMultiSelectMode);
+
+    if (!isMultiSelectMode) {
+        selectedIndices.clear();
+        deleteSelectedBtn.style.display = 'none';
+        renderPeople();
+    }
+}
+
+function toggleItemSelection(index) {
+    if (people[index].locked) return;
+
+    if (selectedIndices.has(index)) {
+        selectedIndices.delete(index);
+    } else {
+        selectedIndices.add(index);
+    }
+
+    deleteSelectedBtn.style.display = selectedIndices.size > 0 ? 'inline-block' : 'none';
+    renderPeople();
+}
+
+window.deleteSelected = function() {
+    if (selectedIndices.size === 0) return;
+    if (confirm(`確定要刪除選取的 ${selectedIndices.size} 個項目嗎？`)) {
+        const sortedIndices = Array.from(selectedIndices).sort((a, b) => b - a);
+        sortedIndices.forEach(index => {
+            people.splice(index, 1);
+        });
+        
+        selectedIndices.clear();
+        deleteSelectedBtn.style.display = 'none';
+        renderPeople();
+    }
+}
+
 function renameItem(index) {
     if (!people[index]) return;
     if (people[index].locked) {
@@ -161,24 +204,25 @@ function renderPeople() {
         div.className = `person ${item.color || 'green'}`;
         div.dataset.index = index;
 
+        if (selectedIndices.has(index)) {
+            div.classList.add('selected');
+        }
         if (item.locked) {
             div.classList.add('locked');
         }
-
         if (item.type === 'alliance-flag' && item.locked) {
             div.classList.add('send-to-back');
         }
 
         const lockBtn = document.createElement('div');
         lockBtn.className = 'lock-btn';
-        lockBtn.innerHTML = item.locked ? '🔒' : '🔓';
+        lockBtn.innerHTML = '🔒';
         lockBtn.onclick = (e) => {
             e.stopPropagation();
             toggleLock(index);
         };
         div.appendChild(lockBtn);
 
-        // 【★★★ 在這裡貼上第二段程式碼 ★★★】
         const renameBtn = document.createElement('div');
         renameBtn.className = 'rename-btn';
         renameBtn.innerHTML = '✏️';
@@ -186,7 +230,7 @@ function renderPeople() {
             e.stopPropagation();
             renameItem(index);
         };
-        div.appendChild(renameBtn);        
+        div.appendChild(renameBtn);
 
         const textDiv = document.createElement('div');
         textDiv.className = 'text';
@@ -197,28 +241,13 @@ function renderPeople() {
         let width, height;
 
         switch(item.type) {
-            case 'small': // 1x1
-                width = height = gridSpacing * Math.sqrt(2);
-                break;
-            case 'person': // 2x2
-                width = height = gridSpacing * 2 * Math.sqrt(2);
-                break;
-            case 'center': // 3x3
-                width = height = gridSpacing * 3 * Math.sqrt(2);
-                break;
-            case 'large': // 4x4
-                width = height = gridSpacing * 4 * Math.sqrt(2);
-                break;
-            case 'flag': // 1x2
-                width = gridSpacing * 1 * Math.sqrt(2); 
-                height = gridSpacing * 2 * Math.sqrt(2); 
-                break;
-            case 'alliance-flag': // 7x7
-                div.classList.add('alliance-flag-container');
-                width = height = gridSpacing * 7 * Math.sqrt(2);
-                break;
-            default: // 預設為 2x2
-                width = height = gridSpacing * 2 * Math.sqrt(2);
+            case 'small': width = height = gridSpacing * Math.sqrt(2); break;
+            case 'person': width = height = gridSpacing * 2 * Math.sqrt(2); break;
+            case 'center': width = height = gridSpacing * 3 * Math.sqrt(2); break;
+            case 'large': width = height = gridSpacing * 4 * Math.sqrt(2); break;
+            case 'flag': width = gridSpacing * 1 * Math.sqrt(2); height = gridSpacing * 2 * Math.sqrt(2); break;
+            case 'alliance-flag': div.classList.add('alliance-flag-container'); width = height = gridSpacing * 7 * Math.sqrt(2); break;
+            default: width = height = gridSpacing * 2 * Math.sqrt(2);
         }
 
         const centerPos = gridToPixel(item.gridX, item.gridY);
@@ -331,6 +360,11 @@ function setupTouchEvents(element, index) {
 }
 
 function startDragMode(e, index) {
+    if (isMultiSelectMode) {
+        toggleItemSelection(index);
+        return;
+    }
+
     if (people[index] && people[index].locked) {
         updateDebugInfo('🔒 此項目已被鎖定');
         const element = mapContainer.querySelector(`[data-index="${index}"]`);
@@ -346,11 +380,17 @@ function startDragMode(e, index) {
         return;
     }
     
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    
     isDragging = true;
     dragPerson = index;
+    
+    if (!selectedIndices.has(index)) {
+        selectedIndices.clear();
+        selectedIndices.add(index);
+        renderPeople();
+    }
+    
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     
     const element = mapContainer.querySelector(`[data-index="${index}"]`);
     const rect = element.getBoundingClientRect();
@@ -394,32 +434,55 @@ function setupGlobalEventListeners() {
     }, { passive: false });
 
     const handleMove = (e) => {
-        const rect = mapContainer.getBoundingClientRect();
-        
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        
-        const pixelX = clientX - rect.left;
-        const pixelY = clientY - rect.top;
-        const grid = pixelToGrid(pixelX, pixelY);
-        
         if (!isDragging) {
+            const rect = mapContainer.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const pixelX = clientX - rect.left;
+            const pixelY = clientY - rect.top;
+            const grid = pixelToGrid(pixelX, pixelY);
             coordsEl.textContent = `座標: ${Math.round(pixelX)}, ${Math.round(pixelY)} | 格線: (${grid.gridX}, ${grid.gridY})`;
-        } else if (dragPerson !== null) {
-            const newPixelX = clientX - dragOffset.x;
-            const newPixelY = clientY - dragOffset.y;
-            const newGrid = pixelToGrid(newPixelX - rect.left, newPixelY - rect.top);
+        } else if (selectedIndices.size > 0) {
+            const rect = mapContainer.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            if (!dragOffset.calculated) {
+                const firstItem = people[dragPerson];
+                const firstItemPos = gridToPixel(firstItem.gridX, firstItem.gridY);
+                dragOffset.x = clientX - (firstItemPos.x + rect.left);
+                dragOffset.y = clientY - (firstItemPos.y + rect.top);
+                dragOffset.calculated = true;
+
+                selectedIndices.forEach(idx => {
+                    people[idx].initialGridX = people[idx].gridX;
+                    people[idx].initialGridY = people[idx].gridY;
+                });
+            }
             
-            people[dragPerson].gridX = newGrid.gridX;
-            people[dragPerson].gridY = newGrid.gridY;
+            const newBasePixelX = clientX - dragOffset.x - rect.left;
+            const newBasePixelY = clientY - dragOffset.y - rect.top;
+            const newBaseGrid = pixelToGrid(newBasePixelX, newBasePixelY);
+
+            const gridDeltaX = newBaseGrid.gridX - people[dragPerson].initialGridX;
+            const gridDeltaY = newBaseGrid.gridY - people[dragPerson].initialGridY;
             
+            selectedIndices.forEach(idx => {
+                if (!people[idx].locked) {
+                    people[idx].gridX = people[idx].initialGridX + gridDeltaX;
+                    people[idx].gridY = people[idx].initialGridY + gridDeltaY;
+                }
+            });
+
             renderPeople();
-            createDragTrail(newPixelX, newPixelY);
         }
     };
 
     const handleEnd = () => {
-        if (isDragging) setTimeout(endDrag, 10);
+        if (isDragging) {
+            dragOffset.calculated = false;
+            endDrag();
+        }
     };
 
     document.addEventListener('mousemove', handleMove);
