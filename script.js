@@ -6,35 +6,19 @@ import { getDatabase, ref, set, onValue } from 'https://www.gstatic.com/firebase
 let people = [];
 let app, database;
 let isUpdatingFromFirebase = false;
-
-// Interaction states
-let isDragging = false;
-let isPanning = false;
-let isMarqueeSelecting = false;
-
-// Drag, Pan, Zoom variables
+let isDragging = false, isPanning = false, isMarqueeSelecting = false;
 let dragPerson = null;
 let dragOffset = { x: 0, y: 0, calculated: false };
 let panStart = { x: 0, y: 0 };
 let scale = 1.0;
 let viewPos = { x: 0, y: 0 };
-
-// Multi-select & Marquee variables
 let isMultiSelectMode = false;
 let selectedIndices = new Set();
 let selectionBox = null;
 let marqueeStartPos = { x: 0, y: 0 };
 
-// --- DOM Elements ---
-const mapContainer = document.getElementById('mapContainer');
-const peopleCountEl = document.getElementById('peopleCount');
-const coordsEl = document.getElementById('coords');
-const newItemNameInput = document.getElementById('newItemName');
-const itemTypeSelect = document.getElementById('itemType');
-const itemColorSelect = document.getElementById('itemColor');
-const connectionStatusEl = document.getElementById('connectionStatus');
-const multiSelectBtn = document.getElementById('multiSelectBtn');
-const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+// --- DOM Elements (will be assigned once DOM is loaded) ---
+let mapContainer, peopleCountEl, coordsEl, newItemNameInput, itemTypeSelect, itemColorSelect, connectionStatusEl, multiSelectBtn, deleteSelectedBtn;
 
 // --- Constants ---
 const MAP_WIDTH = 7500;
@@ -42,19 +26,35 @@ const MAP_HEIGHT = 6000;
 const GRID_ORIGIN_X = MAP_WIDTH / 2;
 const GRID_ORIGIN_Y = MAP_HEIGHT / 2;
 
-// --- Password Verification & Initialization ---
-if (checkPassword()) {
-    initialize();
-}
+// --- Main App Logic ---
+
+// This is the standard and correct way to start the application.
+// It waits for the entire HTML document to be ready before running any code.
+document.addEventListener('DOMContentLoaded', () => {
+    // Assign DOM elements safely now that they are loaded
+    mapContainer = document.getElementById('mapContainer');
+    peopleCountEl = document.getElementById('peopleCount');
+    coordsEl = document.getElementById('coords');
+    newItemNameInput = document.getElementById('newItemName');
+    itemTypeSelect = document.getElementById('itemType');
+    itemColorSelect = document.getElementById('itemColor');
+    connectionStatusEl = document.getElementById('connectionStatus');
+    multiSelectBtn = document.getElementById('multiSelectBtn');
+    deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+    
+    // Start the application after password check
+    if (checkPassword()) {
+        initialize();
+    }
+});
 
 function initialize() {
-    setupFirebase();
-    setupGlobalEventListeners();
-    // 將地圖中心移到視窗中心
     const initialX = (window.innerWidth / 2) - (MAP_WIDTH / 2) * scale;
     const initialY = (window.innerHeight / 2) - (MAP_HEIGHT / 2) * scale;
     viewPos = { x: initialX, y: initialY };
     updateMapTransform();
+    setupFirebase();
+    setupGlobalEventListeners();
 }
 
 function checkPassword() {
@@ -147,52 +147,35 @@ function renderPeople() {
         div.style.height = `${height}px`;
         div.style.left = `${centerPos.x - width / 2}px`;
         div.style.top = `${centerPos.y - height / 2}px`;
-
+        
         div.addEventListener('contextmenu', (e) => { e.preventDefault(); changeColor(index); });
-
-        // Re-add individual listeners for robust dragging
-        setupItemEventListeners(div, index);
-
+        
         mapContainer.appendChild(div);
     });
 
     if (!isUpdatingFromFirebase) saveToFirebase();
 }
 
-// --- Event Handling Logic ---
-function setupItemEventListeners(element, index) {
-    element.addEventListener('mousedown', (e) => {
-        if (e.button !== 0) return; // Ignore right-click
-        
-        // Let global handler manage selection/panning, but initiate drag here
-        if (isMultiSelectMode) {
-            // Clicks on items in multi-select mode are handled globally
-            return;
-        }
-
-        // Standard drag initiation
-        isDragging = true;
-        dragPerson = index;
-        if (!selectedIndices.has(index)) {
-            selectedIndices.clear();
-            deleteSelectedBtn.style.display = 'none';
-            selectedIndices.add(index);
-            renderPeople(); // Re-render to show selection
-        }
-    });
-}
-
+// --- Global Event Listeners ---
 function setupGlobalEventListeners() {
     const handleMouseDown = (e) => {
         if (e.button !== 0) return;
         const target = e.target;
 
         if (target.classList.contains('person')) {
-             if (isMultiSelectMode) {
-                const index = parseInt(target.dataset.index, 10);
+            const index = parseInt(target.dataset.index, 10);
+            if (isMultiSelectMode) {
                 toggleItemSelection(index);
+            } else {
+                isDragging = true;
+                dragPerson = index;
+                if (!selectedIndices.has(index)) {
+                    selectedIndices.clear();
+                    deleteSelectedBtn.style.display = 'none';
+                    selectedIndices.add(index);
+                    renderPeople();
+                }
             }
-            // Drag initiation is now handled by setupItemEventListeners
         } else if (isMultiSelectMode && target === mapContainer) {
             isMarqueeSelecting = true;
             if (!e.shiftKey) {
@@ -237,8 +220,8 @@ function setupGlobalEventListeners() {
             const startY = (marqueeStartPos.y - rect.top) / scale;
             selectionBox.style.left = `${Math.min(startX, currentX)}px`;
             selectionBox.style.top = `${Math.min(startY, currentY)}px`;
-            selectionBox.style.width = `${Math.abs(startX, currentX)}px`;
-            selectionBox.style.height = `${Math.abs(startY, currentY)}px`;
+            selectionBox.style.width = `${Math.abs(startX - currentX)}px`;
+            selectionBox.style.height = `${Math.abs(startY - currentY)}px`;
         } else if (isDragging && selectedIndices.size > 0) {
             const rect = mapContainer.getBoundingClientRect();
             if (!dragOffset.calculated) {
@@ -296,7 +279,6 @@ function setupGlobalEventListeners() {
         if (isDragging) {
             isDragging = false;
             dragOffset.calculated = false;
-            renderPeople(); // Save final position
         }
     };
 
@@ -317,7 +299,6 @@ function setupGlobalEventListeners() {
         updateMapTransform();
     };
     
-    // Use document for mouseup/mousemove to catch events outside the map
     document.addEventListener('mousedown', handleMouseDown);
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
