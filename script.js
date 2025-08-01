@@ -42,19 +42,17 @@ const MAP_HEIGHT = 12000;
 const GRID_ORIGIN_X = MAP_WIDTH / 2;
 const GRID_ORIGIN_Y = MAP_HEIGHT / 2;
 
-// --- Password Verification & Initialization ---
-if (checkPassword()) {
-    initialize();
-}
+// --- Firebase Configuration ---
+const firebaseConfig = {
+    apiKey: "AIzaSyC_onVT6MHR0fU3SgKKM0VH951gwBC5PB0",
+    authDomain: "allott-16d7d.firebaseapp.com",
+    projectId: "allott-16d7d",
+    storageBucket: "allott-16d7d.firebasestorage.app",
+    messagingSenderId: "987230174619",
+    appId: "1:987230174619:web:7176d4f4e4ced5b9e2353e"
+};
 
-function initialize() {
-    const initialX = (window.innerWidth / 2) - (MAP_WIDTH / 2) * scale;
-    const initialY = (window.innerHeight / 2) - (MAP_HEIGHT / 2) * scale;
-    viewPos = { x: initialX, y: initialY };
-    updateMapTransform();
-    setupFirebase();
-    setupGlobalEventListeners();
-}
+// --- Function Definitions ---
 
 function checkPassword() {
     const today = new Date();
@@ -70,16 +68,6 @@ function checkPassword() {
     }
     return true;
 }
-
-// --- Firebase ---
-const firebaseConfig = {
-    apiKey: "AIzaSyC_onVT6MHR0fU3SgKKM0VH951gwBC5PB0",
-    authDomain: "allott-16d7d.firebaseapp.com",
-    projectId: "allott-16d7d",
-    storageBucket: "allott-16d7d.firebasestorage.app",
-    messagingSenderId: "987230174619",
-    appId: "1:987230174619:web:7176d4f4e4ced5b9e2353e"
-};
 
 function setupFirebase() {
     try {
@@ -116,7 +104,6 @@ function setupFirebaseListener() {
     });
 }
 
-// --- Coordinate Transformation ---
 function gridToPixel(gridX, gridY) {
     const gridStep = 40;
     const rotatedX = (gridX - gridY) * gridStep / 2;
@@ -133,7 +120,6 @@ function pixelToGrid(pixelX, pixelY) {
     return { gridX, gridY };
 }
 
-// --- Core UI Functions ---
 window.addItem = function () {
     const type = itemTypeSelect.value;
     let name = (type === 'alliance-flag') ? '旗子' : newItemNameInput.value.trim();
@@ -144,7 +130,7 @@ window.addItem = function () {
     people.push({ name, gridX: 6, gridY: 6, type, color: itemColorSelect.value, locked: false });
     if (type !== 'alliance-flag') newItemNameInput.value = '';
     renderPeople();
-}
+};
 
 function deleteItem(index) {
     if (people[index]?.locked) {
@@ -190,17 +176,16 @@ window.unlockAllItems = function () {
         people.forEach(item => item.locked = false);
         renderPeople();
     }
-}
+};
 
 window.toggleMultiSelectMode = function () {
     isMultiSelectMode = !isMultiSelectMode;
     mapContainer.classList.toggle('multi-select-mode', isMultiSelectMode);
     multiSelectBtn.classList.toggle('active', isMultiSelectMode);
     if (!isMultiSelectMode) {
-        // Exiting multi-select mode does not clear selection
         renderPeople();
     }
-}
+};
 
 function toggleItemSelection(index) {
     if (people[index].locked) return;
@@ -216,9 +201,8 @@ window.deleteSelected = function () {
     selectedIndices.clear();
     deleteSelectedBtn.style.display = 'none';
     renderPeople();
-}
+};
 
-// --- Rendering ---
 function renderPeople() {
     mapContainer.innerHTML = '';
     peopleCountEl.textContent = people.length;
@@ -227,34 +211,28 @@ function renderPeople() {
         const div = document.createElement('div');
         div.className = `person ${item.color || 'green'}`;
         div.dataset.index = index;
-
         if (selectedIndices.has(index)) div.classList.add('selected');
         if (item.locked) div.classList.add('locked');
         if (item.type === 'alliance-flag' && item.locked) div.classList.add('send-to-back');
-
         const lockBtn = document.createElement('div');
         lockBtn.className = 'lock-btn';
         lockBtn.innerHTML = '🔒';
         lockBtn.onclick = (e) => { e.stopPropagation(); toggleLock(index); };
         div.appendChild(lockBtn);
-
         const renameBtn = document.createElement('div');
         renameBtn.className = 'rename-btn';
         renameBtn.innerHTML = '✏️';
         renameBtn.onclick = (e) => { e.stopPropagation(); renameItem(index); };
         div.appendChild(renameBtn);
-
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'delete-btn';
         deleteBtn.textContent = '×';
         deleteBtn.onclick = (e) => { e.stopPropagation(); deleteItem(index); };
         div.appendChild(deleteBtn);
-
         const textDiv = document.createElement('div');
         textDiv.className = 'text';
         textDiv.textContent = item.name;
         div.appendChild(textDiv);
-
         const gridSpacing = 40;
         let width, height;
         switch (item.type) {
@@ -266,27 +244,22 @@ function renderPeople() {
             case 'alliance-flag': div.classList.add('alliance-flag-container'); width = height = gridSpacing * 7 * Math.sqrt(2); break;
             default: width = height = gridSpacing * 2 * Math.sqrt(2);
         }
-
         const centerPos = gridToPixel(item.gridX, item.gridY);
         div.style.width = `${width}px`;
         div.style.height = `${height}px`;
         div.style.left = `${centerPos.x - width / 2}px`;
         div.style.top = `${centerPos.y - height / 2}px`;
-        
         div.addEventListener('contextmenu', (e) => { e.preventDefault(); changeColor(index); });
-        
         mapContainer.appendChild(div);
     });
 
     if (!isUpdatingFromFirebase) saveToFirebase();
 }
 
-// --- Global Event Listeners ---
 function setupGlobalEventListeners() {
     const handleMouseDown = (e) => {
         if (e.button !== 0) return;
         const target = e.target;
-
         if (target.classList.contains('person')) {
             const index = parseInt(target.dataset.index, 10);
             if (isMultiSelectMode) {
@@ -303,10 +276,7 @@ function setupGlobalEventListeners() {
             }
         } else if (isMultiSelectMode && target === mapContainer) {
             isMarqueeSelecting = true;
-            if (!e.shiftKey) {
-                selectedIndices.clear();
-                deleteSelectedBtn.style.display = 'none';
-            }
+            if (!e.shiftKey) selectedIndices.clear();
             const rect = mapContainer.getBoundingClientRect();
             marqueeStartPos = { x: e.clientX, y: e.clientY };
             selectionBox = document.createElement('div');
@@ -325,11 +295,9 @@ function setupGlobalEventListeners() {
             }
         }
     };
-
     const handleMouseMove = (e) => {
         const clientX = e.clientX;
         const clientY = e.clientY;
-
         if (isPanning) {
             const dx = clientX - panStart.x;
             const dy = clientY - panStart.y;
@@ -380,7 +348,6 @@ function setupGlobalEventListeners() {
             coordsEl.textContent = `座標: ${Math.round(pixelX)}, ${Math.round(pixelY)} | 格線: (${grid.gridX}, ${grid.gridY})`;
         }
     };
-
     const handleMouseUp = () => {
         if (isPanning) {
             isPanning = false;
@@ -406,7 +373,6 @@ function setupGlobalEventListeners() {
             dragOffset.calculated = false;
         }
     };
-
     const handleWheel = (e) => {
         e.preventDefault();
         const zoomIntensity = 0.1;
@@ -423,7 +389,7 @@ function setupGlobalEventListeners() {
         viewPos.y = e.clientY - mouseY * (scale / oldScale);
         updateMapTransform();
     };
-
+    
     document.addEventListener('mousedown', handleMouseDown);
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
