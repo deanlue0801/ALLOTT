@@ -84,15 +84,19 @@ body {
 
 .map-container {
     position: relative;
-    width: 15000px;
-    height: 12000px;
+    width: 5000px;
+    height: 4000px;
     margin: 0;
     background: #34495e;
     border: none;
-    cursor: crosshair;
+    /*cursor: crosshair;
     overflow: visible;
     margin-top: 80px;
-    transition: transform 0.3s ease;
+    /*transition: transform 0.3s ease;
+
+    /* 【★★★ 以下是本次新增的樣式 ★★★】 */
+    cursor: grab; /* 預設顯示為可抓取的手掌 */
+    transform-origin: 0 0; /* 將變形的基準點設為左上角 */
 }
 
 .person {
