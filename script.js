@@ -34,19 +34,7 @@ const MAP_HEIGHT = 12000;
 const GRID_ORIGIN_X = MAP_WIDTH / 2;
 const GRID_ORIGIN_Y = MAP_HEIGHT / 2;
 
-// --- Password Verification & Initialization ---
-(function initialize() {
-    if (!checkPassword()) {
-        return; // Stop execution if password fails
-    }
-    const centerX = MAP_WIDTH / 2 - window.innerWidth / 2;
-    const centerY = MAP_HEIGHT / 2 - window.innerHeight / 2;
-    window.scrollTo(centerX, centerY);
-    
-    setupFirebase();
-    setupGlobalEventListeners();
-})();
-
+// --- Password Verification ---
 function checkPassword() {
     const today = new Date();
     const year = today.getFullYear();
@@ -63,7 +51,7 @@ function checkPassword() {
     return true;
 }
 
-// --- Firebase ---
+// --- Firebase Configuration & Initialization ---
 const firebaseConfig = {
     apiKey: "AIzaSyC_onVT6MHR0fU3SgKKM0VH951gwBC5PB0",
     authDomain: "allott-16d7d.firebaseapp.com",
@@ -177,7 +165,6 @@ function toggleLock(index) {
     }
 }
 
-// 【★★★ 新增「全部解鎖」功能 ★★★】
 window.unlockAllItems = function() {
     if (confirm('確定要解鎖地圖上所有項目嗎？')) {
         people.forEach(item => item.locked = false);
@@ -279,7 +266,7 @@ function renderPeople() {
 function setupGlobalEventListeners() {
     
     const handleMouseDown = (e) => {
-        if (e.button !== 0) return; // Ignore right-click
+        if (e.button !== 0) return;
         const target = e.target;
 
         if (target.classList.contains('person')) {
@@ -288,7 +275,7 @@ function setupGlobalEventListeners() {
                 toggleItemSelection(index);
             } else {
                 isDragging = true;
-                dragPerson = index; // The item that initiates the drag
+                dragPerson = index;
                 if (!selectedIndices.has(index)) {
                     selectedIndices.clear();
                     selectedIndices.add(index);
@@ -394,4 +381,19 @@ function setupGlobalEventListeners() {
 // --- Utility ---
 function checkIntersection(rect1, rect2) {
     return !(rect1.right < rect2.left || rect1.left > rect2.right || rect1.bottom < rect2.top || rect1.top > rect2.bottom);
+}
+
+// --- App Initialization ---
+function initialize() {
+    const centerX = MAP_WIDTH / 2 - window.innerWidth / 2;
+    const centerY = MAP_HEIGHT / 2 - window.innerHeight / 2;
+    window.scrollTo(centerX, centerY);
+    
+    setupFirebase();
+    setupGlobalEventListeners();
+}
+
+// Start the application after password check
+if (checkPassword()) {
+    initialize();
 }
