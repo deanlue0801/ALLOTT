@@ -514,3 +514,16 @@ body {
 .multi-select-mode .person:not(.locked) {
     cursor: pointer !important;
 }
+/* 1. 圈選功能的選取框樣式 */
+.selection-box {
+    position: absolute;
+    background: rgba(52, 152, 219, 0.2);
+    border: 1px solid #3498db;
+    z-index: 9999;
+    pointer-events: none; /* 讓選框本身不會擋住滑鼠事件 */
+}
+
+/* 2. 讓被鎖定在底層的旗幟，滑鼠移上去時能暫時浮上來 */
+.send-to-back:hover {
+    z-index: 11 !important; /* 暫時將圖層順序設為 11 (比預設的 10 高) */
+}
