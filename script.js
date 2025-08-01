@@ -37,8 +37,8 @@ const multiSelectBtn = document.getElementById('multiSelectBtn');
 const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
 
 // --- Constants ---
-const MAP_WIDTH = 15000;
-const MAP_HEIGHT = 12000;
+const MAP_WIDTH = 7500;
+const MAP_HEIGHT = 6000;
 const GRID_ORIGIN_X = MAP_WIDTH / 2;
 const GRID_ORIGIN_Y = MAP_HEIGHT / 2;
 
@@ -48,12 +48,13 @@ if (checkPassword()) {
 }
 
 function initialize() {
+    setupFirebase();
+    setupGlobalEventListeners();
+    // 將地圖中心移到視窗中心
     const initialX = (window.innerWidth / 2) - (MAP_WIDTH / 2) * scale;
     const initialY = (window.innerHeight / 2) - (MAP_HEIGHT / 2) * scale;
     viewPos = { x: initialX, y: initialY };
     updateMapTransform();
-    setupFirebase();
-    setupGlobalEventListeners();
 }
 
 function checkPassword() {
@@ -72,151 +73,25 @@ function checkPassword() {
 }
 
 // --- Firebase ---
-const firebaseConfig = {
-    apiKey: "AIzaSyC_onVT6MHR0fU3SgKKM0VH951gwBC5PB0",
-    authDomain: "allott-16d7d.firebaseapp.com",
-    projectId: "allott-16d7d",
-    storageBucket: "allott-16d7d.firebasestorage.app",
-    messagingSenderId: "987230174619",
-    appId: "1:987230174619:web:7176d4f4e4ced5b9e2353e"
-};
-
-function setupFirebase() {
-    try {
-        app = initializeApp(firebaseConfig);
-        database = getDatabase(app);
-        connectionStatusEl.textContent = '已連接';
-        connectionStatusEl.className = 'status connected';
-        setupFirebaseListener();
-    } catch (error) {
-        console.warn('Firebase 連接失敗:', error);
-        connectionStatusEl.textContent = '離線模式';
-        renderPeople();
-    }
-}
-
-function saveToFirebase() {
-    if (!database || isUpdatingFromFirebase) return;
-    try {
-        const layoutRef = ref(database, 'bearDenLayout');
-        set(layoutRef, { people: people, lastUpdated: Date.now() });
-    } catch (error) {
-        console.warn('Firebase 儲存失敗:', error);
-    }
-}
-
-function setupFirebaseListener() {
-    const layoutRef = ref(database, 'bearDenLayout');
-    onValue(layoutRef, (snapshot) => {
-        isUpdatingFromFirebase = true;
-        const data = snapshot.val();
-        people = (data && data.people) ? data.people : [];
-        renderPeople();
-        isUpdatingFromFirebase = false;
-    });
-}
+const firebaseConfig = { apiKey: "AIzaSyC_onVT6MHR0fU3SgKKM0VH951gwBC5PB0", authDomain: "allott-16d7d.firebaseapp.com", projectId: "allott-16d7d", storageBucket: "allott-16d7d.firebasestorage.app", messagingSenderId: "987230174619", appId: "1:987230174619:web:7176d4f4e4ced5b9e2353e" };
+function setupFirebase() { try { app = initializeApp(firebaseConfig); database = getDatabase(app); connectionStatusEl.textContent = '已連接'; connectionStatusEl.className = 'status connected'; setupFirebaseListener(); } catch (error) { console.warn('Firebase 連接失敗:', error); connectionStatusEl.textContent = '離線模式'; renderPeople(); } }
+function saveToFirebase() { if (!database || isUpdatingFromFirebase) return; try { const layoutRef = ref(database, 'bearDenLayout'); set(layoutRef, { people: people, lastUpdated: Date.now() }); } catch (error) { console.warn('Firebase 儲存失敗:', error); } }
+function setupFirebaseListener() { const layoutRef = ref(database, 'bearDenLayout'); onValue(layoutRef, (snapshot) => { isUpdatingFromFirebase = true; const data = snapshot.val(); people = (data && data.people) ? data.people : []; renderPeople(); isUpdatingFromFirebase = false; }); }
 
 // --- Coordinate Transformation ---
-function gridToPixel(gridX, gridY) {
-    const gridStep = 40;
-    const rotatedX = (gridX - gridY) * gridStep / 2;
-    const rotatedY = (gridX + gridY) * gridStep / 2;
-    return { x: GRID_ORIGIN_X + rotatedX, y: GRID_ORIGIN_Y + rotatedY };
-}
-
-function pixelToGrid(pixelX, pixelY) {
-    const deltaX = pixelX - GRID_ORIGIN_X;
-    const deltaY = pixelY - GRID_ORIGIN_Y;
-    const gridStep = 40;
-    const gridX = Math.round((deltaX + deltaY) / gridStep);
-    const gridY = Math.round((deltaY - deltaX) / gridStep);
-    return { gridX, gridY };
-}
+function gridToPixel(gridX, gridY) { const gridStep = 40; const rotatedX = (gridX - gridY) * gridStep / 2; const rotatedY = (gridX + gridY) * gridStep / 2; return { x: GRID_ORIGIN_X + rotatedX, y: GRID_ORIGIN_Y + rotatedY }; }
+function pixelToGrid(pixelX, pixelY) { const deltaX = pixelX - GRID_ORIGIN_X; const deltaY = pixelY - GRID_ORIGIN_Y; const gridStep = 40; const gridX = Math.round((deltaX + deltaY) / gridStep); const gridY = Math.round((deltaY - deltaX) / gridStep); return {gridX, gridY}; }
 
 // --- Core UI Functions ---
-window.addItem = function () {
-    const type = itemTypeSelect.value;
-    let name = (type === 'alliance-flag') ? '旗子' : newItemNameInput.value.trim();
-    if (!name) {
-        alert('請輸入名稱！');
-        return;
-    }
-    people.push({ name, gridX: 6, gridY: 6, type, color: itemColorSelect.value, locked: false });
-    if (type !== 'alliance-flag') newItemNameInput.value = '';
-    renderPeople();
-};
-
-function deleteItem(index) {
-    if (people[index]?.locked) {
-        alert('❌ 無法刪除，此項目已被鎖定！');
-        return;
-    }
-    if (confirm(`確定要刪除 "${people[index].name}" 嗎？`)) {
-        people.splice(index, 1);
-        renderPeople();
-    }
-}
-
-function renameItem(index) {
-    if (people[index]?.locked) {
-        alert('❌ 無法改名，此項目已被鎖定！');
-        return;
-    }
-    const newName = prompt('請輸入新的名稱：', people[index].name);
-    if (newName && newName.trim()) {
-        people[index].name = newName.trim();
-        renderPeople();
-    }
-}
-
-function changeColor(index) {
-    if (people[index]?.locked) return;
-    const colors = ['green', 'blue', 'purple', 'orange', 'pink', 'yellow', 'cyan', 'red'];
-    const currentColor = people[index].color || 'green';
-    const nextIndex = (colors.indexOf(currentColor) + 1) % colors.length;
-    people[index].color = colors[nextIndex];
-    renderPeople();
-}
-
-function toggleLock(index) {
-    if (people[index]) {
-        people[index].locked = !people[index].locked;
-        renderPeople();
-    }
-}
-
-window.unlockAllItems = function () {
-    if (confirm('確定要解鎖地圖上所有項目嗎？')) {
-        people.forEach(item => item.locked = false);
-        renderPeople();
-    }
-};
-
-window.toggleMultiSelectMode = function () {
-    isMultiSelectMode = !isMultiSelectMode;
-    mapContainer.classList.toggle('multi-select-mode', isMultiSelectMode);
-    multiSelectBtn.classList.toggle('active', isMultiSelectMode);
-    if (!isMultiSelectMode) {
-        // Exiting multi-select mode does not clear selection
-        renderPeople();
-    }
-};
-
-function toggleItemSelection(index) {
-    if (people[index].locked) return;
-    selectedIndices.has(index) ? selectedIndices.delete(index) : selectedIndices.add(index);
-    deleteSelectedBtn.style.display = selectedIndices.size > 0 ? 'inline-block' : 'none';
-    renderPeople();
-}
-
-window.deleteSelected = function () {
-    if (selectedIndices.size === 0 || !confirm(`確定要刪除選取的 ${selectedIndices.size} 個項目嗎？`)) return;
-    const sortedIndices = Array.from(selectedIndices).sort((a, b) => b - a);
-    sortedIndices.forEach(index => people.splice(index, 1));
-    selectedIndices.clear();
-    deleteSelectedBtn.style.display = 'none';
-    renderPeople();
-};
+window.addItem = function () { const type = itemTypeSelect.value; let name = (type === 'alliance-flag') ? '旗子' : newItemNameInput.value.trim(); if (!name) { alert('請輸入名稱！'); return; } people.push({ name, gridX: 6, gridY: 6, type, color: itemColorSelect.value, locked: false }); if (type !== 'alliance-flag') newItemNameInput.value = ''; renderPeople(); }
+function deleteItem(index) { if (people[index]?.locked) { alert('❌ 無法刪除，此項目已被鎖定！'); return; } if (confirm(`確定要刪除 "${people[index].name}" 嗎？`)) { people.splice(index, 1); renderPeople(); } }
+function renameItem(index) { if (people[index]?.locked) { alert('❌ 無法改名，此項目已被鎖定！'); return; } const newName = prompt('請輸入新的名稱：', people[index].name); if (newName && newName.trim()) { people[index].name = newName.trim(); renderPeople(); } }
+function changeColor(index) { if (people[index]?.locked) return; const colors = ['green', 'blue', 'purple', 'orange', 'pink', 'yellow', 'cyan', 'red']; const currentColor = people[index].color || 'green'; const nextIndex = (colors.indexOf(currentColor) + 1) % colors.length; people[index].color = colors[nextIndex]; renderPeople(); }
+function toggleLock(index) { if (people[index]) { people[index].locked = !people[index].locked; renderPeople(); } }
+window.unlockAllItems = function () { if (confirm('確定要解鎖地圖上所有項目嗎？')) { people.forEach(item => item.locked = false); renderPeople(); } }
+window.toggleMultiSelectMode = function () { isMultiSelectMode = !isMultiSelectMode; mapContainer.classList.toggle('multi-select-mode', isMultiSelectMode); multiSelectBtn.classList.toggle('active', isMultiSelectMode); if (!isMultiSelectMode) { renderPeople(); } }
+function toggleItemSelection(index) { if (people[index].locked) return; selectedIndices.has(index) ? selectedIndices.delete(index) : selectedIndices.add(index); deleteSelectedBtn.style.display = selectedIndices.size > 0 ? 'inline-block' : 'none'; renderPeople(); }
+window.deleteSelected = function () { if (selectedIndices.size === 0 || !confirm(`確定要刪除選取的 ${selectedIndices.size} 個項目嗎？`)) return; const sortedIndices = Array.from(selectedIndices).sort((a, b) => b - a); sortedIndices.forEach(index => people.splice(index, 1)); selectedIndices.clear(); deleteSelectedBtn.style.display = 'none'; renderPeople(); }
 
 // --- Rendering ---
 function renderPeople() {
@@ -272,11 +147,11 @@ function renderPeople() {
         div.style.height = `${height}px`;
         div.style.left = `${centerPos.x - width / 2}px`;
         div.style.top = `${centerPos.y - height / 2}px`;
-        
+
         div.addEventListener('contextmenu', (e) => { e.preventDefault(); changeColor(index); });
-        
-        // This function is now called inside setupGlobalEventListeners
-        // setupTouchEvents(div, index);
+
+        // Re-add individual listeners for robust dragging
+        setupItemEventListeners(div, index);
 
         mapContainer.appendChild(div);
     });
@@ -284,27 +159,40 @@ function renderPeople() {
     if (!isUpdatingFromFirebase) saveToFirebase();
 }
 
-// --- Event Handling and Drag Logic ---
+// --- Event Handling Logic ---
+function setupItemEventListeners(element, index) {
+    element.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return; // Ignore right-click
+        
+        // Let global handler manage selection/panning, but initiate drag here
+        if (isMultiSelectMode) {
+            // Clicks on items in multi-select mode are handled globally
+            return;
+        }
+
+        // Standard drag initiation
+        isDragging = true;
+        dragPerson = index;
+        if (!selectedIndices.has(index)) {
+            selectedIndices.clear();
+            deleteSelectedBtn.style.display = 'none';
+            selectedIndices.add(index);
+            renderPeople(); // Re-render to show selection
+        }
+    });
+}
+
 function setupGlobalEventListeners() {
-    
     const handleMouseDown = (e) => {
         if (e.button !== 0) return;
         const target = e.target;
 
         if (target.classList.contains('person')) {
-            const index = parseInt(target.dataset.index, 10);
-            if (isMultiSelectMode) {
+             if (isMultiSelectMode) {
+                const index = parseInt(target.dataset.index, 10);
                 toggleItemSelection(index);
-            } else {
-                isDragging = true;
-                dragPerson = index;
-                if (!selectedIndices.has(index)) {
-                    selectedIndices.clear();
-                    deleteSelectedBtn.style.display = 'none';
-                    selectedIndices.add(index);
-                    renderPeople();
-                }
             }
+            // Drag initiation is now handled by setupItemEventListeners
         } else if (isMultiSelectMode && target === mapContainer) {
             isMarqueeSelecting = true;
             if (!e.shiftKey) {
@@ -349,8 +237,8 @@ function setupGlobalEventListeners() {
             const startY = (marqueeStartPos.y - rect.top) / scale;
             selectionBox.style.left = `${Math.min(startX, currentX)}px`;
             selectionBox.style.top = `${Math.min(startY, currentY)}px`;
-            selectionBox.style.width = `${Math.abs(startX - currentX)}px`;
-            selectionBox.style.height = `${Math.abs(startY - currentY)}px`;
+            selectionBox.style.width = `${Math.abs(startX, currentX)}px`;
+            selectionBox.style.height = `${Math.abs(startY, currentY)}px`;
         } else if (isDragging && selectedIndices.size > 0) {
             const rect = mapContainer.getBoundingClientRect();
             if (!dragOffset.calculated) {
@@ -408,6 +296,7 @@ function setupGlobalEventListeners() {
         if (isDragging) {
             isDragging = false;
             dragOffset.calculated = false;
+            renderPeople(); // Save final position
         }
     };
 
@@ -428,6 +317,7 @@ function setupGlobalEventListeners() {
         updateMapTransform();
     };
     
+    // Use document for mouseup/mousemove to catch events outside the map
     document.addEventListener('mousedown', handleMouseDown);
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
