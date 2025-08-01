@@ -165,6 +165,10 @@ function renderPeople() {
             div.classList.add('locked');
         }
 
+        if (item.type === 'alliance-flag' && item.locked) {
+            div.classList.add('send-to-back');
+        }
+
         const lockBtn = document.createElement('div');
         lockBtn.className = 'lock-btn';
         lockBtn.innerHTML = item.locked ? '🔒' : '🔓';
