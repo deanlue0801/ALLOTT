@@ -42,17 +42,19 @@ const MAP_HEIGHT = 12000;
 const GRID_ORIGIN_X = MAP_WIDTH / 2;
 const GRID_ORIGIN_Y = MAP_HEIGHT / 2;
 
-// --- Firebase Configuration ---
-const firebaseConfig = {
-    apiKey: "AIzaSyC_onVT6MHR0fU3SgKKM0VH951gwBC5PB0",
-    authDomain: "allott-16d7d.firebaseapp.com",
-    projectId: "allott-16d7d",
-    storageBucket: "allott-16d7d.firebasestorage.app",
-    messagingSenderId: "987230174619",
-    appId: "1:987230174619:web:7176d4f4e4ced5b9e2353e"
-};
+// --- Password Verification & Initialization ---
+if (checkPassword()) {
+    initialize();
+}
 
-// --- Function Definitions ---
+function initialize() {
+    const initialX = (window.innerWidth / 2) - (MAP_WIDTH / 2) * scale;
+    const initialY = (window.innerHeight / 2) - (MAP_HEIGHT / 2) * scale;
+    viewPos = { x: initialX, y: initialY };
+    updateMapTransform();
+    setupFirebase();
+    setupGlobalEventListeners();
+}
 
 function checkPassword() {
     const today = new Date();
@@ -68,6 +70,16 @@ function checkPassword() {
     }
     return true;
 }
+
+// --- Firebase ---
+const firebaseConfig = {
+    apiKey: "AIzaSyC_onVT6MHR0fU3SgKKM0VH951gwBC5PB0",
+    authDomain: "allott-16d7d.firebaseapp.com",
+    projectId: "allott-16d7d",
+    storageBucket: "allott-16d7d.firebasestorage.app",
+    messagingSenderId: "987230174619",
+    appId: "1:987230174619:web:7176d4f4e4ced5b9e2353e"
+};
 
 function setupFirebase() {
     try {
@@ -104,6 +116,7 @@ function setupFirebaseListener() {
     });
 }
 
+// --- Coordinate Transformation ---
 function gridToPixel(gridX, gridY) {
     const gridStep = 40;
     const rotatedX = (gridX - gridY) * gridStep / 2;
@@ -120,6 +133,7 @@ function pixelToGrid(pixelX, pixelY) {
     return { gridX, gridY };
 }
 
+// --- Core UI Functions ---
 window.addItem = function () {
     const type = itemTypeSelect.value;
     let name = (type === 'alliance-flag') ? '旗子' : newItemNameInput.value.trim();
@@ -183,6 +197,7 @@ window.toggleMultiSelectMode = function () {
     mapContainer.classList.toggle('multi-select-mode', isMultiSelectMode);
     multiSelectBtn.classList.toggle('active', isMultiSelectMode);
     if (!isMultiSelectMode) {
+        // Exiting multi-select mode does not clear selection
         renderPeople();
     }
 };
@@ -203,6 +218,7 @@ window.deleteSelected = function () {
     renderPeople();
 };
 
+// --- Rendering ---
 function renderPeople() {
     mapContainer.innerHTML = '';
     peopleCountEl.textContent = people.length;
@@ -211,28 +227,34 @@ function renderPeople() {
         const div = document.createElement('div');
         div.className = `person ${item.color || 'green'}`;
         div.dataset.index = index;
+
         if (selectedIndices.has(index)) div.classList.add('selected');
         if (item.locked) div.classList.add('locked');
         if (item.type === 'alliance-flag' && item.locked) div.classList.add('send-to-back');
+
         const lockBtn = document.createElement('div');
         lockBtn.className = 'lock-btn';
         lockBtn.innerHTML = '🔒';
         lockBtn.onclick = (e) => { e.stopPropagation(); toggleLock(index); };
         div.appendChild(lockBtn);
+
         const renameBtn = document.createElement('div');
         renameBtn.className = 'rename-btn';
         renameBtn.innerHTML = '✏️';
         renameBtn.onclick = (e) => { e.stopPropagation(); renameItem(index); };
         div.appendChild(renameBtn);
+
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'delete-btn';
         deleteBtn.textContent = '×';
         deleteBtn.onclick = (e) => { e.stopPropagation(); deleteItem(index); };
         div.appendChild(deleteBtn);
+
         const textDiv = document.createElement('div');
         textDiv.className = 'text';
         textDiv.textContent = item.name;
         div.appendChild(textDiv);
+
         const gridSpacing = 40;
         let width, height;
         switch (item.type) {
@@ -244,22 +266,31 @@ function renderPeople() {
             case 'alliance-flag': div.classList.add('alliance-flag-container'); width = height = gridSpacing * 7 * Math.sqrt(2); break;
             default: width = height = gridSpacing * 2 * Math.sqrt(2);
         }
+
         const centerPos = gridToPixel(item.gridX, item.gridY);
         div.style.width = `${width}px`;
         div.style.height = `${height}px`;
         div.style.left = `${centerPos.x - width / 2}px`;
         div.style.top = `${centerPos.y - height / 2}px`;
+        
         div.addEventListener('contextmenu', (e) => { e.preventDefault(); changeColor(index); });
+        
+        // This function is now called inside setupGlobalEventListeners
+        // setupTouchEvents(div, index);
+
         mapContainer.appendChild(div);
     });
 
     if (!isUpdatingFromFirebase) saveToFirebase();
 }
 
+// --- Event Handling and Drag Logic ---
 function setupGlobalEventListeners() {
+    
     const handleMouseDown = (e) => {
         if (e.button !== 0) return;
         const target = e.target;
+
         if (target.classList.contains('person')) {
             const index = parseInt(target.dataset.index, 10);
             if (isMultiSelectMode) {
@@ -276,7 +307,10 @@ function setupGlobalEventListeners() {
             }
         } else if (isMultiSelectMode && target === mapContainer) {
             isMarqueeSelecting = true;
-            if (!e.shiftKey) selectedIndices.clear();
+            if (!e.shiftKey) {
+                selectedIndices.clear();
+                deleteSelectedBtn.style.display = 'none';
+            }
             const rect = mapContainer.getBoundingClientRect();
             marqueeStartPos = { x: e.clientX, y: e.clientY };
             selectionBox = document.createElement('div');
@@ -295,9 +329,11 @@ function setupGlobalEventListeners() {
             }
         }
     };
+
     const handleMouseMove = (e) => {
         const clientX = e.clientX;
         const clientY = e.clientY;
+
         if (isPanning) {
             const dx = clientX - panStart.x;
             const dy = clientY - panStart.y;
@@ -348,6 +384,7 @@ function setupGlobalEventListeners() {
             coordsEl.textContent = `座標: ${Math.round(pixelX)}, ${Math.round(pixelY)} | 格線: (${grid.gridX}, ${grid.gridY})`;
         }
     };
+
     const handleMouseUp = () => {
         if (isPanning) {
             isPanning = false;
@@ -373,6 +410,7 @@ function setupGlobalEventListeners() {
             dragOffset.calculated = false;
         }
     };
+
     const handleWheel = (e) => {
         e.preventDefault();
         const zoomIntensity = 0.1;
@@ -405,19 +443,4 @@ function updateMapTransform() {
 
 function checkIntersection(rect1, rect2) {
     return !(rect1.right < rect2.left || rect1.left > rect2.right || rect1.bottom < rect2.top || rect1.top > rect2.bottom);
-}
-
-// --- App Initialization ---
-function initialize() {
-    const centerX = MAP_WIDTH / 2 - window.innerWidth / 2;
-    const centerY = MAP_HEIGHT / 2 - window.innerHeight / 2;
-    window.scrollTo(centerX, centerY);
-    
-    setupFirebase();
-    setupGlobalEventListeners();
-}
-
-// Start the application after password check
-if (checkPassword()) {
-    initialize();
 }
