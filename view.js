@@ -9,8 +9,8 @@ const coordsEl = document.getElementById('coords');
 const connectionStatusEl = document.getElementById('connectionStatus');
 
 // --- Constants ---
-const MAP_WIDTH = 7500;
-const MAP_HEIGHT = 6000;
+const MAP_WIDTH = 3750;
+const MAP_HEIGHT = 3000;
 const GRID_ORIGIN_X = MAP_WIDTH / 2;
 const GRID_ORIGIN_Y = MAP_HEIGHT / 2;
 
