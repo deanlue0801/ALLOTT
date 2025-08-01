@@ -6,13 +6,16 @@ import { getDatabase, ref, set, onValue } from 'https://www.gstatic.com/firebase
 let people = [];
 let app, database;
 let isDragging = false;
-let dragPerson = null; // 在單選模式下，代表被拖曳的項目索引
+let dragPerson = null;
 let dragOffset = {x: 0, y: 0, calculated: false};
 let isUpdatingFromFirebase = false;
 
-// Multi-select variables
+// Multi-select & Marquee variables
 let isMultiSelectMode = false;
 let selectedIndices = new Set();
+let isMarqueeSelecting = false;
+let selectionBox = null;
+let marqueeStartPos = { x: 0, y: 0 };
 
 // Touch-related variables
 let touchStartTime = 0;
@@ -270,7 +273,9 @@ function renderPeople() {
             changeColor(index);
         });
 
-        setupTouchEvents(div, index);
+        // 移除舊的 mousedown 監聽器，統一由 mapContainer 處理
+        // element.addEventListener('mousedown', (e) => { startDragMode(e, index); });
+        
         mapContainer.appendChild(div);
     });
 
@@ -279,92 +284,14 @@ function renderPeople() {
 
 // --- Event Handling and Drag Logic ---
 
-function setupTouchEvents(element, index) {
-    let touchStarted = false;
-    let isDraggingThis = false;
-
-    element.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        touchStarted = true;
-        currentTouchTarget = element;
-        touchStartTime = Date.now();
-        showTouchFeedback(element, true);
-        
-        setTimeout(() => {
-            startDragMode(e, index);
-            isDraggingThis = true;
-        }, 50);
-        
-    }, { passive: false });
-
-    element.addEventListener('touchmove', (e) => {
-        if (!isDraggingThis || !isDragging) return;
-        
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const rect = mapContainer.getBoundingClientRect();
-        const clientX = e.touches[0].clientX;
-        const clientY = e.touches[0].clientY;
-        
-        const newCenterX = clientX - dragOffset.x;
-        const newCenterY = clientY - dragOffset.y;
-        
-        const containerX = newCenterX - rect.left;
-        const containerY = newCenterY - rect.top;
-        const newGrid = pixelToGrid(containerX, containerY);
-        
-        people[dragPerson].gridX = newGrid.gridX;
-        people[dragPerson].gridY = newGrid.gridY;
-        
-        renderPeople();
-        createDragTrail(containerX, containerY);
-        coordsEl.textContent = `🎯 拖拽中: 格線(${newGrid.gridX}, ${newGrid.gridY})`;
-        updateDebugInfo(`拖拽移動: (${newGrid.gridX}, ${newGrid.gridY})`);
-    }, { passive: false });
-
-    element.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        touchStarted = false;
-        isDraggingThis = false;
-        
-        if (longPressTimer) {
-            clearTimeout(longPressTimer);
-            longPressTimer = null;
-        }
-        
-        showTouchFeedback(element, false);
-        
-        if (isDragging) endDrag();
-        currentTouchTarget = null;
-    });
-
-    element.addEventListener('touchcancel', (e) => {
-        touchStarted = false;
-        isDraggingThis = false;
-        if (longPressTimer) {
-            clearTimeout(longPressTimer);
-            longPressTimer = null;
-        }
-        showTouchFeedback(element, false);
-        if (isDragging) endDrag();
-    });
-
-    element.addEventListener('mousedown', (e) => {
-        startDragMode(e, index);
-    });
+function checkIntersection(rect1, rect2) {
+    return !(rect1.right < rect2.left || 
+             rect1.left > rect2.right || 
+             rect1.bottom < rect2.top || 
+             rect1.top > rect2.bottom);
 }
 
 function startDragMode(e, index) {
-    if (isMultiSelectMode) {
-        toggleItemSelection(index);
-        return;
-    }
-
     if (people[index] && people[index].locked) {
         updateDebugInfo('🔒 此項目已被鎖定');
         const element = mapContainer.querySelector(`[data-index="${index}"]`);
@@ -376,9 +303,6 @@ function startDragMode(e, index) {
     }
 
     if (isDragging) return;
-    if (e.target.classList.contains('delete-btn') || e.target.classList.contains('lock-btn') || e.target.classList.contains('rename-btn')) {
-        return;
-    }
     
     isDragging = true;
     dragPerson = index;
@@ -393,11 +317,6 @@ function startDragMode(e, index) {
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     
     const element = mapContainer.querySelector(`[data-index="${index}"]`);
-    const rect = element.getBoundingClientRect();
-    
-    dragOffset.x = clientX - (rect.left + rect.width / 2);
-    dragOffset.y = clientY - (rect.top + rect.height / 2);
-    
     element.classList.add('dragging');
     showDragHint(true);
     
@@ -427,26 +346,63 @@ function endDrag() {
 }
 
 function setupGlobalEventListeners() {
-    document.addEventListener('touchend', (e) => {
-        if (isAndroid() && isDragging && dragPerson !== null) {
-            setTimeout(endDrag, 50);
+    const handleMouseDown = (e) => {
+        // 忽略右鍵
+        if (e.button !== 0) return;
+
+        const target = e.target;
+        
+        if (target.classList.contains('person')) {
+            const index = parseInt(target.dataset.index, 10);
+            if (isMultiSelectMode) {
+                toggleItemSelection(index);
+            } else {
+                startDragMode(e, index);
+            }
+        } else if (target.classList.contains('lock-btn') || target.classList.contains('rename-btn') || target.classList.contains('delete-btn')) {
+            // 點擊按鈕時，事件已在按鈕的 onclick 中處理，此處不執行任何操作
+            return;
+        } else if (isMultiSelectMode && target === mapContainer) {
+            // 開始畫框選取
+            isMarqueeSelecting = true;
+            if (!e.shiftKey) { // 如果沒有按住 shift，則清空之前的選取
+                selectedIndices.clear();
+            }
+
+            const rect = mapContainer.getBoundingClientRect();
+            marqueeStartPos = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+
+            selectionBox = document.createElement('div');
+            selectionBox.className = 'selection-box';
+            selectionBox.style.left = `${marqueeStartPos.x}px`;
+            selectionBox.style.top = `${marqueeStartPos.y}px`;
+            mapContainer.appendChild(selectionBox);
         }
-    }, { passive: false });
+    };
 
-    const handleMove = (e) => {
-        if (!isDragging) {
-            const rect = mapContainer.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            const pixelX = clientX - rect.left;
-            const pixelY = clientY - rect.top;
-            const grid = pixelToGrid(pixelX, pixelY);
-            coordsEl.textContent = `座標: ${Math.round(pixelX)}, ${Math.round(pixelY)} | 格線: (${grid.gridX}, ${grid.gridY})`;
-        } else if (selectedIndices.size > 0) {
-            const rect = mapContainer.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const handleMouseMove = (e) => {
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const rect = mapContainer.getBoundingClientRect();
 
+        if (isMarqueeSelecting) {
+            const currentX = clientX - rect.left;
+            const currentY = clientY - rect.top;
+
+            const newX = Math.min(marqueeStartPos.x, currentX);
+            const newY = Math.min(marqueeStartPos.y, currentY);
+            const width = Math.abs(marqueeStartPos.x - currentX);
+            const height = Math.abs(marqueeStartPos.y - currentY);
+            
+            selectionBox.style.left = `${newX}px`;
+            selectionBox.style.top = `${newY}px`;
+            selectionBox.style.width = `${width}px`;
+            selectionBox.style.height = `${height}px`;
+
+        } else if (isDragging && selectedIndices.size > 0) {
             if (!dragOffset.calculated) {
                 const firstItem = people[dragPerson];
                 const firstItemPos = gridToPixel(firstItem.gridX, firstItem.gridY);
@@ -473,20 +429,44 @@ function setupGlobalEventListeners() {
                     people[idx].gridY = people[idx].initialGridY + gridDeltaY;
                 }
             });
-
             renderPeople();
+        } else {
+            const pixelX = clientX - rect.left;
+            const pixelY = clientY - rect.top;
+            const grid = pixelToGrid(pixelX, pixelY);
+            coordsEl.textContent = `座標: ${Math.round(pixelX)}, ${Math.round(pixelY)} | 格線: (${grid.gridX}, ${grid.gridY})`;
         }
     };
 
-    const handleEnd = () => {
+    const handleMouseUp = (e) => {
+        if (isMarqueeSelecting) {
+            const boxRect = selectionBox.getBoundingClientRect();
+            mapContainer.querySelectorAll('.person').forEach(p => {
+                const personRect = p.getBoundingClientRect();
+                if (checkIntersection(boxRect, personRect)) {
+                    const index = parseInt(p.dataset.index, 10);
+                    if (!people[index].locked) {
+                        selectedIndices.add(index);
+                    }
+                }
+            });
+
+            mapContainer.removeChild(selectionBox);
+            selectionBox = null;
+            isMarqueeSelecting = false;
+            deleteSelectedBtn.style.display = selectedIndices.size > 0 ? 'inline-block' : 'none';
+            renderPeople();
+        }
+
         if (isDragging) {
             dragOffset.calculated = false;
             endDrag();
         }
     };
-
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', handleEnd);
+    
+    mapContainer.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && newItemNameInput === document.activeElement) {
@@ -581,7 +561,7 @@ function isAndroid() { return /Android/i.test(navigator.userAgent); }
 function isIOS() { return /iPad|iPhone|iPod/.test(navigator.userAgent); }
 
 function updateDebugInfo(message) {
-    if (isAndroid()) {
+    if (isAndroid() && coordsEl) {
         coordsEl.style.background = 'rgba(231, 76, 60, 0.9)';
         coordsEl.style.color = 'white';
         coordsEl.innerHTML = `🤖 ${message}`;
