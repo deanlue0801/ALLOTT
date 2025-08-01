@@ -132,6 +132,20 @@ function pixelToGrid(pixelX, pixelY) {
 
 // --- Core Functions ---
 
+// 【★★★ 在這裡貼上第一段程式碼 ★★★】
+function renameItem(index) {
+    if (!people[index]) return;
+    if (people[index].locked) {
+        alert('❌ 無法改名，此項目已被鎖定！');
+        return;
+    }
+    const newName = prompt('請輸入新的名稱：', people[index].name);
+    if (newName && newName.trim() !== '') {
+        people[index].name = newName.trim();
+        renderPeople();
+    }
+}
+
 function toggleLock(index) {
     if (!people[index]) return;
     people[index].locked = !people[index].locked;
