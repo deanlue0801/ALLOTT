@@ -22,16 +22,13 @@
             <select id="itemColor">
                 <option value="green">綠色</option>
                 <option value="blue">藍色</option>
-                <option value="purple">紫色</option>
-                <option value="orange">橘色</option>
-                <option value="pink">粉色</option>
-                <option value="yellow">黃色</option>
-                <option value="cyan">青色</option>
-                <option value="red">紅色</option>
-            </select>
+                </select>
             <button onclick="addItem()" class="btn">新增</button>
             <button onclick="exportLayout()" class="btn">匯出</button>
             <button onclick="clearAll()" class="btn danger">清空</button>
+            
+            <button id="multiSelectBtn" onclick="toggleMultiSelectMode()" class="btn mode-btn">多選模式</button>
+            <button id="deleteSelectedBtn" onclick="deleteSelected()" class="btn danger" style="display: none;">刪除選取</button>
             <div class="status" id="connectionStatus">連接中...</div>
             <a href="view.html" class="btn view">👀 觀看</a>
             <a href="index.html" class="btn">🏠 首頁</a>
@@ -45,17 +42,6 @@
         編輯模式 | 項目數: <span id="peopleCount">0</span> | 直接拖拽移動
     </div>
     
-    <div class="debug-overlay" id="debugOverlay">除錯資訊</div>
-    
-    <div class="mobile-tips">
-        💡 編輯模式：直接拖拽項目 | 右鍵改色
-    </div>
-    
-    <div class="touch-hint" id="touchHint">
-        <div>🎯 正在拖拽</div>
-        <div style="font-size: 12px; margin-top: 5px;">移動到目標位置後放開</div>
-    </div>
-
     <script type="module" src="script.js"></script>
 </body>
 </html>
