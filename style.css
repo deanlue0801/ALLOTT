@@ -488,3 +488,29 @@ body {
 .send-to-back {
     z-index: 1 !important; /* 將圖層順序設為 1 (預設是 10)，讓它沉到最下面 */
 }
+
+/* (省略前面所有未變更的 CSS) */
+/* ... */
+
+/* 【★★★ 在檔案最底部，新增以下樣式 ★★★】 */
+
+/* 多選模式按鈕的啟用樣式 */
+.mode-btn.active {
+    background: #f39c12; /* 橘色高亮 */
+    color: #fff;
+}
+
+.mode-btn.active:hover {
+    background: #e67e22;
+}
+
+/* 被選中項目的樣式 */
+.person.selected {
+    box-shadow: 0 0 25px rgba(52, 152, 219, 0.9) !important;
+    border-color: #5dade2 !important;
+}
+
+/* 在多選模式下，滑鼠樣式變為點擊 */
+.multi-select-mode .person:not(.locked) {
+    cursor: pointer !important;
+}
