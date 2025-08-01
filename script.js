@@ -166,20 +166,38 @@ function renderPeople() {
         div.appendChild(textDiv);
 
         const gridSpacing = 40;
-        let size;
+        let width, height;
+
         switch(item.type) {
-            case 'small': size = gridSpacing * Math.sqrt(2); break;
-            case 'person': size = gridSpacing * 2 * Math.sqrt(2); break;
-            case 'center': size = gridSpacing * 3 * Math.sqrt(2); break;
-            case 'large': size = gridSpacing * 4 * Math.sqrt(2); break;
-            default: size = gridSpacing * 2 * Math.sqrt(2);
+            case 'small': // 1x1
+                width = height = gridSpacing * Math.sqrt(2);
+                break;
+            case 'person': // 2x2
+                width = height = gridSpacing * 2 * Math.sqrt(2);
+                break;
+            case 'center': // 3x3
+                width = height = gridSpacing * 3 * Math.sqrt(2);
+                break;
+            case 'large': // 4x4
+                width = height = gridSpacing * 4 * Math.sqrt(2);
+                break;
+            case 'flag': // 1x2
+                width = gridSpacing * 1 * Math.sqrt(2); 
+                height = gridSpacing * 2 * Math.sqrt(2); 
+                break;
+            case 'alliance-flag': // 7x7
+                div.classList.add('alliance-flag-container');
+                width = height = gridSpacing * 7 * Math.sqrt(2);
+                break;
+            default: // 預設為 2x2
+                width = height = gridSpacing * 2 * Math.sqrt(2);
         }
 
         const centerPos = gridToPixel(item.gridX, item.gridY);
-        div.style.width = `${size}px`;
-        div.style.height = `${size}px`;
-        div.style.left = `${centerPos.x - size/2}px`;
-        div.style.top = `${centerPos.y - size/2}px`;
+        div.style.width = `${width}px`;
+        div.style.height = `${height}px`;
+        div.style.left = `${centerPos.x - width / 2}px`;
+        div.style.top = `${centerPos.y - height / 2}px`;
 
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'delete-btn';
@@ -386,18 +404,35 @@ function setupGlobalEventListeners() {
 
 // --- UI-interactive Functions (globally accessible) ---
 window.addItem = function() {
-    const name = newItemNameInput.value.trim();
-    if (name) {
-        people.push({
-            name: name,
-            gridX: 6, gridY: 6,
-            type: itemTypeSelect.value,
-            color: itemColorSelect.value,
-            locked: false
-        });
-        newItemNameInput.value = '';
-        renderPeople();
+    const type = itemTypeSelect.value;
+    let name = '';
+
+    if (type === 'alliance-flag') {
+        name = '旗子';
+    } else {
+        name = newItemNameInput.value.trim();
+        if (!name) {
+            alert('請輸入名稱！');
+            return;
+        }
     }
+
+    const newItem = {
+        name: name,
+        gridX: 6, 
+        gridY: 6,
+        type: type,
+        color: itemColorSelect.value,
+        locked: false
+    };
+
+    people.push(newItem);
+    
+    if (type !== 'alliance-flag') {
+        newItemNameInput.value = '';
+    }
+    
+    renderPeople();
 }
 
 function deleteItem(index) {
