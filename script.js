@@ -5,23 +5,15 @@ import { getDatabase, ref, set, onValue } from 'https://www.gstatic.com/firebase
 // --- Global variables ---
 let people = [];
 let app, database;
-let isUpdatingFromFirebase = false;
-
-// Interaction states
 let isDragging = false;
-let isPanning = false;
-let isMarqueeSelecting = false;
-
-// Drag, Pan, Zoom variables
 let dragPerson = null;
-let dragOffset = { x: 0, y: 0, calculated: false };
-let panStart = { x: 0, y: 0 };
-let scale = 1.0;
-let viewPos = { x: 0, y: 0 };
+let dragOffset = {x: 0, y: 0, calculated: false};
+let isUpdatingFromFirebase = false;
 
 // Multi-select & Marquee variables
 let isMultiSelectMode = false;
 let selectedIndices = new Set();
+let isMarqueeSelecting = false;
 let selectionBox = null;
 let marqueeStartPos = { x: 0, y: 0 };
 
@@ -42,17 +34,18 @@ const MAP_HEIGHT = 12000;
 const GRID_ORIGIN_X = MAP_WIDTH / 2;
 const GRID_ORIGIN_Y = MAP_HEIGHT / 2;
 
-// --- Firebase Configuration ---
-const firebaseConfig = {
-    apiKey: "AIzaSyC_onVT6MHR0fU3SgKKM0VH951gwBC5PB0",
-    authDomain: "allott-16d7d.firebaseapp.com",
-    projectId: "allott-16d7d",
-    storageBucket: "allott-16d7d.firebasestorage.app",
-    messagingSenderId: "987230174619",
-    appId: "1:987230174619:web:7176d4f4e4ced5b9e2353e"
-};
-
-// --- Function Definitions ---
+// --- Password Verification & Initialization ---
+(function initialize() {
+    if (!checkPassword()) {
+        return; // Stop execution if password fails
+    }
+    const centerX = MAP_WIDTH / 2 - window.innerWidth / 2;
+    const centerY = MAP_HEIGHT / 2 - window.innerHeight / 2;
+    window.scrollTo(centerX, centerY);
+    
+    setupFirebase();
+    setupGlobalEventListeners();
+})();
 
 function checkPassword() {
     const today = new Date();
@@ -60,6 +53,7 @@ function checkPassword() {
     const month = String(today.getMonth() + 1).padStart(2, '0');
     const day = String(today.getDate()).padStart(2, '0');
     const todayPassword = `bear${year}${month}${day}`;
+    
     const password = prompt('🔐 請輸入編輯密碼：');
     if (password !== todayPassword) {
         alert('❌ 密碼錯誤！');
@@ -68,6 +62,16 @@ function checkPassword() {
     }
     return true;
 }
+
+// --- Firebase ---
+const firebaseConfig = {
+    apiKey: "AIzaSyC_onVT6MHR0fU3SgKKM0VH951gwBC5PB0",
+    authDomain: "allott-16d7d.firebaseapp.com",
+    projectId: "allott-16d7d",
+    storageBucket: "allott-16d7d.firebasestorage.app",
+    messagingSenderId: "987230174619",
+    appId: "1:987230174619:web:7176d4f4e4ced5b9e2353e"
+};
 
 function setupFirebase() {
     try {
@@ -104,6 +108,7 @@ function setupFirebaseListener() {
     });
 }
 
+// --- Coordinate Transformation ---
 function gridToPixel(gridX, gridY) {
     const gridStep = 40;
     const rotatedX = (gridX - gridY) * gridStep / 2;
@@ -117,10 +122,11 @@ function pixelToGrid(pixelX, pixelY) {
     const gridStep = 40;
     const gridX = Math.round((deltaX + deltaY) / gridStep);
     const gridY = Math.round((deltaY - deltaX) / gridStep);
-    return { gridX, gridY };
+    return {gridX, gridY};
 }
 
-window.addItem = function () {
+// --- Core UI Functions ---
+window.addItem = function() {
     const type = itemTypeSelect.value;
     let name = (type === 'alliance-flag') ? '旗子' : newItemNameInput.value.trim();
     if (!name) {
@@ -130,7 +136,7 @@ window.addItem = function () {
     people.push({ name, gridX: 6, gridY: 6, type, color: itemColorSelect.value, locked: false });
     if (type !== 'alliance-flag') newItemNameInput.value = '';
     renderPeople();
-};
+}
 
 function deleteItem(index) {
     if (people[index]?.locked) {
@@ -171,21 +177,26 @@ function toggleLock(index) {
     }
 }
 
-window.unlockAllItems = function () {
+window.unlockAllItems = function() {
     if (confirm('確定要解鎖地圖上所有項目嗎？')) {
         people.forEach(item => item.locked = false);
         renderPeople();
     }
-};
+}
 
-window.toggleMultiSelectMode = function () {
+// 【★★★ 這邊是唯一的修改！我把清空選取的程式碼拿掉了 ★★★】
+window.toggleMultiSelectMode = function() {
     isMultiSelectMode = !isMultiSelectMode;
     mapContainer.classList.toggle('multi-select-mode', isMultiSelectMode);
     multiSelectBtn.classList.toggle('active', isMultiSelectMode);
-    if (!isMultiSelectMode) {
-        renderPeople();
-    }
-};
+    
+    // 退出模式時，不再清空選取，這樣才能拖曳
+    // if (!isMultiSelectMode) {
+    //     selectedIndices.clear(); // <-- 這行錯誤的程式碼已被移除
+    //     deleteSelectedBtn.style.display = 'none';
+    //     renderPeople();
+    // }
+}
 
 function toggleItemSelection(index) {
     if (people[index].locked) return;
@@ -194,15 +205,16 @@ function toggleItemSelection(index) {
     renderPeople();
 }
 
-window.deleteSelected = function () {
+window.deleteSelected = function() {
     if (selectedIndices.size === 0 || !confirm(`確定要刪除選取的 ${selectedIndices.size} 個項目嗎？`)) return;
     const sortedIndices = Array.from(selectedIndices).sort((a, b) => b - a);
     sortedIndices.forEach(index => people.splice(index, 1));
     selectedIndices.clear();
     deleteSelectedBtn.style.display = 'none';
     renderPeople();
-};
+}
 
+// --- Rendering ---
 function renderPeople() {
     mapContainer.innerHTML = '';
     peopleCountEl.textContent = people.length;
@@ -211,31 +223,37 @@ function renderPeople() {
         const div = document.createElement('div');
         div.className = `person ${item.color || 'green'}`;
         div.dataset.index = index;
+
         if (selectedIndices.has(index)) div.classList.add('selected');
         if (item.locked) div.classList.add('locked');
         if (item.type === 'alliance-flag' && item.locked) div.classList.add('send-to-back');
+
         const lockBtn = document.createElement('div');
         lockBtn.className = 'lock-btn';
         lockBtn.innerHTML = '🔒';
         lockBtn.onclick = (e) => { e.stopPropagation(); toggleLock(index); };
         div.appendChild(lockBtn);
+
         const renameBtn = document.createElement('div');
         renameBtn.className = 'rename-btn';
         renameBtn.innerHTML = '✏️';
         renameBtn.onclick = (e) => { e.stopPropagation(); renameItem(index); };
         div.appendChild(renameBtn);
+        
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'delete-btn';
         deleteBtn.textContent = '×';
         deleteBtn.onclick = (e) => { e.stopPropagation(); deleteItem(index); };
         div.appendChild(deleteBtn);
+
         const textDiv = document.createElement('div');
         textDiv.className = 'text';
         textDiv.textContent = item.name;
         div.appendChild(textDiv);
+
         const gridSpacing = 40;
         let width, height;
-        switch (item.type) {
+        switch(item.type) {
             case 'small': width = height = gridSpacing * Math.sqrt(2); break;
             case 'person': width = height = gridSpacing * 2 * Math.sqrt(2); break;
             case 'center': width = height = gridSpacing * 3 * Math.sqrt(2); break;
@@ -244,22 +262,28 @@ function renderPeople() {
             case 'alliance-flag': div.classList.add('alliance-flag-container'); width = height = gridSpacing * 7 * Math.sqrt(2); break;
             default: width = height = gridSpacing * 2 * Math.sqrt(2);
         }
+
         const centerPos = gridToPixel(item.gridX, item.gridY);
         div.style.width = `${width}px`;
         div.style.height = `${height}px`;
         div.style.left = `${centerPos.x - width / 2}px`;
         div.style.top = `${centerPos.y - height / 2}px`;
+        
         div.addEventListener('contextmenu', (e) => { e.preventDefault(); changeColor(index); });
+        
         mapContainer.appendChild(div);
     });
 
     if (!isUpdatingFromFirebase) saveToFirebase();
 }
 
+// --- Global Event Listeners (Drag, Marquee Select) ---
 function setupGlobalEventListeners() {
+    
     const handleMouseDown = (e) => {
         if (e.button !== 0) return;
         const target = e.target;
+
         if (target.classList.contains('person')) {
             const index = parseInt(target.dataset.index, 10);
             if (isMultiSelectMode) {
@@ -276,63 +300,61 @@ function setupGlobalEventListeners() {
             }
         } else if (isMultiSelectMode && target === mapContainer) {
             isMarqueeSelecting = true;
-            if (!e.shiftKey) selectedIndices.clear();
-            const rect = mapContainer.getBoundingClientRect();
-            marqueeStartPos = { x: e.clientX, y: e.clientY };
-            selectionBox = document.createElement('div');
-            selectionBox.className = 'selection-box';
-            selectionBox.style.left = `${(e.clientX - rect.left) / scale}px`;
-            selectionBox.style.top = `${(e.clientY - rect.top) / scale}px`;
-            mapContainer.appendChild(selectionBox);
-        } else if (target === mapContainer) {
-            isPanning = true;
-            panStart = { x: e.clientX, y: e.clientY };
-            mapContainer.style.cursor = 'grabbing';
-            if (!e.shiftKey && !isMultiSelectMode) {
+            if (!e.shiftKey) {
                 selectedIndices.clear();
                 deleteSelectedBtn.style.display = 'none';
-                renderPeople();
             }
+            
+            const rect = mapContainer.getBoundingClientRect();
+            marqueeStartPos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+            
+            selectionBox = document.createElement('div');
+            selectionBox.className = 'selection-box';
+            selectionBox.style.left = `${marqueeStartPos.x}px`;
+            selectionBox.style.top = `${marqueeStartPos.y}px`;
+            mapContainer.appendChild(selectionBox);
+        } else if (target === mapContainer) {
+            // 在非多選模式下點擊空白處，取消所有選取
+            selectedIndices.clear();
+            deleteSelectedBtn.style.display = 'none';
+            renderPeople();
         }
     };
+
     const handleMouseMove = (e) => {
         const clientX = e.clientX;
         const clientY = e.clientY;
-        if (isPanning) {
-            const dx = clientX - panStart.x;
-            const dy = clientY - panStart.y;
-            viewPos.x += dx;
-            viewPos.y += dy;
-            updateMapTransform();
-            panStart = { x: clientX, y: clientY };
-        } else if (isMarqueeSelecting) {
-            const rect = mapContainer.getBoundingClientRect();
-            const currentX = (clientX - rect.left) / scale;
-            const currentY = (clientY - rect.top) / scale;
-            const startX = (marqueeStartPos.x - rect.left) / scale;
-            const startY = (marqueeStartPos.y - rect.top) / scale;
-            selectionBox.style.left = `${Math.min(startX, currentX)}px`;
-            selectionBox.style.top = `${Math.min(startY, currentY)}px`;
-            selectionBox.style.width = `${Math.abs(startX - currentX)}px`;
-            selectionBox.style.height = `${Math.abs(startY - currentY)}px`;
+        const rect = mapContainer.getBoundingClientRect();
+
+        if (isMarqueeSelecting) {
+            const currentX = clientX - rect.left;
+            const currentY = clientY - rect.top;
+            selectionBox.style.left = `${Math.min(marqueeStartPos.x, currentX)}px`;
+            selectionBox.style.top = `${Math.min(marqueeStartPos.y, currentY)}px`;
+            selectionBox.style.width = `${Math.abs(marqueeStartPos.x - currentX)}px`;
+            selectionBox.style.height = `${Math.abs(marqueeStartPos.y - currentY)}px`;
+
         } else if (isDragging && selectedIndices.size > 0) {
-            const rect = mapContainer.getBoundingClientRect();
             if (!dragOffset.calculated) {
                 const firstItem = people[dragPerson];
                 const firstItemPos = gridToPixel(firstItem.gridX, firstItem.gridY);
-                dragOffset.x = clientX - (firstItemPos.x * scale + viewPos.x);
-                dragOffset.y = clientY - (firstItemPos.y * scale + viewPos.y);
+                dragOffset.x = clientX - (firstItemPos.x + rect.left);
+                dragOffset.y = clientY - (firstItemPos.y + rect.top);
                 dragOffset.calculated = true;
+
                 selectedIndices.forEach(idx => {
                     people[idx].initialGridX = people[idx].gridX;
                     people[idx].initialGridY = people[idx].gridY;
                 });
             }
-            const newBasePixelX = (clientX - viewPos.x - dragOffset.x) / scale;
-            const newBasePixelY = (clientY - viewPos.y - dragOffset.y) / scale;
+            
+            const newBasePixelX = clientX - dragOffset.x - rect.left;
+            const newBasePixelY = clientY - dragOffset.y - rect.top;
             const newBaseGrid = pixelToGrid(newBasePixelX, newBasePixelY);
+
             const gridDeltaX = newBaseGrid.gridX - people[dragPerson].initialGridX;
             const gridDeltaY = newBaseGrid.gridY - people[dragPerson].initialGridY;
+            
             selectedIndices.forEach(idx => {
                 if (!people[idx].locked) {
                     people[idx].gridX = people[idx].initialGridX + gridDeltaX;
@@ -341,23 +363,18 @@ function setupGlobalEventListeners() {
             });
             renderPeople();
         } else {
-            const rect = mapContainer.getBoundingClientRect();
-            const pixelX = (clientX - rect.left) / scale;
-            const pixelY = (clientY - rect.top) / scale;
+            const pixelX = clientX - rect.left;
+            const pixelY = clientY - rect.top;
             const grid = pixelToGrid(pixelX, pixelY);
             coordsEl.textContent = `座標: ${Math.round(pixelX)}, ${Math.round(pixelY)} | 格線: (${grid.gridX}, ${grid.gridY})`;
         }
     };
+
     const handleMouseUp = () => {
-        if (isPanning) {
-            isPanning = false;
-            mapContainer.style.cursor = 'grab';
-        }
         if (isMarqueeSelecting) {
             const boxRect = selectionBox.getBoundingClientRect();
             mapContainer.querySelectorAll('.person').forEach(p => {
-                const personRect = p.getBoundingClientRect();
-                if (checkIntersection(boxRect, personRect)) {
+                if (checkIntersection(boxRect, p.getBoundingClientRect())) {
                     const index = parseInt(p.dataset.index, 10);
                     if (!people[index].locked) selectedIndices.add(index);
                 }
@@ -368,41 +385,39 @@ function setupGlobalEventListeners() {
             deleteSelectedBtn.style.display = selectedIndices.size > 0 ? 'inline-block' : 'none';
             renderPeople();
         }
+
         if (isDragging) {
             isDragging = false;
             dragOffset.calculated = false;
+            renderPeople();
         }
-    };
-    const handleWheel = (e) => {
-        e.preventDefault();
-        const zoomIntensity = 0.1;
-        const oldScale = scale;
-        if (e.deltaY < 0) {
-            scale *= (1 + zoomIntensity);
-        } else {
-            scale /= (1 + zoomIntensity);
-        }
-        scale = Math.max(0.1, Math.min(scale, 5));
-        const mouseX = e.clientX - viewPos.x;
-        const mouseY = e.clientY - viewPos.y;
-        viewPos.x = e.clientX - mouseX * (scale / oldScale);
-        viewPos.y = e.clientY - mouseY * (scale / oldScale);
-        updateMapTransform();
     };
     
-    document.addEventListener('mousedown', handleMouseDown);
+    mapContainer.addEventListener('mousedown', handleMouseDown);
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('wheel', handleWheel, { passive: false });
+
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && newItemNameInput === document.activeElement) addItem();
     });
 }
 
-function updateMapTransform() {
-    mapContainer.style.transform = `translate(${viewPos.x}px, ${viewPos.y}px) scale(${scale})`;
-}
-
+// --- Utility ---
 function checkIntersection(rect1, rect2) {
     return !(rect1.right < rect2.left || rect1.left > rect2.right || rect1.bottom < rect2.top || rect1.top > rect2.bottom);
+}
+
+// --- App Initialization ---
+function initialize() {
+    const centerX = MAP_WIDTH / 2 - window.innerWidth / 2;
+    const centerY = MAP_HEIGHT / 2 - window.innerHeight / 2;
+    window.scrollTo(centerX, centerY);
+    
+    setupFirebase();
+    setupGlobalEventListeners();
+}
+
+// Start the application after password check
+if (checkPassword()) {
+    initialize();
 }
