@@ -356,6 +356,24 @@ body {
   75% { transform: rotate(45deg) translateX(3px); }
 }
 
+/* ----- Alliance Flag (7x7) CSS ----- */
+.alliance-flag-container {
+    border-style: dashed !important;
+    border-width: 2px !important;
+    background: rgba(0, 0, 0, 0.1) !important;
+}
+
+.alliance-flag-container::before {
+    content: '';
+    position: absolute;
+    width: calc(100% / 7);
+    height: calc(100% / 7);
+    border: 3px solid;
+    border-color: inherit;
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
 /* ----- Media Queries for Mobile ----- */
 @media (max-width: 768px) {
     .header {
