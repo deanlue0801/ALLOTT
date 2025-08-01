@@ -170,7 +170,7 @@ body {
 .delete-btn {
     position: absolute;
     top: -8px;
-    right: -8px;
+    /* right: -8px; <-- 這行會被下面的新規則覆蓋 */
     width: 16px;
     height: 16px;
     background: #e74c3c;
@@ -183,6 +183,51 @@ body {
     z-index: 15;
     justify-content: center;
     align-items: center;
+}
+
+/* 【★★★ 以下為本次新增及修改的 CSS ★★★】 */
+
+/* 1. 新增改名按鈕的樣式 */
+.rename-btn {
+    position: absolute;
+    top: -10px;
+    /* 讓它顯示在正中間 */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 20px;
+    background: #3498db;
+    color: white;
+    border-radius: 50%;
+    font-size: 12px;
+    cursor: pointer;
+    display: none; /* 平時隱藏 */
+    z-index: 20;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.rename-btn:hover {
+    background: #2980b9;
+}
+
+/* 2. 讓刪除按鈕稍微往右移，才不會跟改名按鈕重疊 */
+.delete-btn {
+    right: -10px; 
+}
+
+
+/* 3. 修改 hover 規則，讓三個按鈕一起顯示 */
+.person:hover .lock-btn,
+.person:hover .delete-btn,
+.person:hover .rename-btn {
+    display: flex;
+}
+
+/* 4. 如果項目被鎖定，也隱藏改名按鈕 */
+.person.locked .rename-btn {
+    display: none !important;
 }
 
 .person:hover .delete-btn,
